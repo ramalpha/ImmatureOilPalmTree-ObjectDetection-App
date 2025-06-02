@@ -1,6 +1,5 @@
 streamlit
-deepforest
-albumentations
+git+https://github.com/weecology/DeepForest.git#egg=deepforest #deepforest
 pycocotools
 opencv-python-headless
 torch
