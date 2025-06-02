@@ -1,6 +1,7 @@
 streamlit
-deepforest==1.5.2
-albumentations==0.5.2
+deepforest
+albumentations
+pycocotools
 opencv-python-headless
 torch
 torchvision
