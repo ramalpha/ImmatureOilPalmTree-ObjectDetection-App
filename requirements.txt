@@ -1,6 +1,6 @@
 deepforest
 streamlit
-cv2
+opencv-python-headless
 torch
 torchvision
 Pillow
