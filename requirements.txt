@@ -1,8 +1,10 @@
-deepforest
 streamlit
+deepforest==1.5.2
+albumentations==0.5.2
 opencv-python-headless
 torch
 torchvision
+rasterio
 Pillow
 numpy
 pandas
