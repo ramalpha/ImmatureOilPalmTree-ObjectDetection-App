@@ -153,7 +153,7 @@ def prediction_on_image(model, image_path, score_thresh=0.5,
 
 # --- Main Streamlit Application ---
 st.set_page_config(layout="wide") # Optional: Use full page width
-st.title('Ripeness Palm Oil Detection (DeepForest)')
+st.title('Immature Oil Palm Tree Detection')
 
 # --- Load Model ---
 model = load_deepforest_model(DEEPFOREST_MODEL_PATH)
