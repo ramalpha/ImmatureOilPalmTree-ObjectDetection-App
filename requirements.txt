@@ -1,2 +1,9 @@
 deepforest
 streamlit
+cv2
+torch
+torchvision
+Pillow
+numpy
+pandas
+matplotlib
