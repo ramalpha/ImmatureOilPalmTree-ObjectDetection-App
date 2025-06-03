@@ -8,4 +8,3 @@ rasterio
 Pillow
 numpy
 pandas
-matplotlib
