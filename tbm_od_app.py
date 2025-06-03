@@ -11,16 +11,15 @@ from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 
 # --- Configuration ---
-# IMPORTANT: Adjust these paths as per your project structure
 DEEPFOREST_MODEL_PATH = "models/tbmdetection-v2-20250507.pth"
-DEMO_IMG_PATH = "demo/demo_image.tif" # Ensure this demo image exists
+DEMO_IMG_PATH = "demo/demo_image.tif"
 
 # --- Model Loading ---
 @st.cache_resource
 def load_deepforest_model(checkpoint_path):
     st.write(f"Attempting to load DeepForest model from: {checkpoint_path}")
     try:
-        # !!! IMPORTANT: Customize num_classes and label_dict for your model !!!
+        # !!! IMPORTANT: Customize num_classes and label_dict for the model !!!
         label_mapping = {"tbm-1": 0, "tbm-2": 1} 
         num_classes_for_model = 2
         
@@ -50,37 +49,51 @@ def load_deepforest_model(checkpoint_path):
 # --- Main Prediction Function ---
 def prediction_on_image(model, image_path, score_thresh=0.5,
                         save_dir=None, custom_filename=None,
-                        patch_size=512, patch_overlap=0.1,
-                        tile_size=1024, tile_overlap=0.2, min_tile_size=4000,
-                        max_pixels=178956970):
+                        patch_size=800,       
+                        patch_overlap=0.1,   
+                        min_tile_size=4000,   # Threshold to switch to predict_tile
+                        max_pixels=178956970   
+                       ):
     """
     Predicts objects in an image using the provided DeepForest model and visualizes the results.
     Handles multiple classes, assigns different colors, dynamically adjusts label text size.
     Uses predict_tile for large images and predict_image for smaller ones.
-    Compresses the image if it exceeds the specified pixel limit.
+    Compresses the image if it exceeds the specified pixel limit during Pillow load.
     Returns: (visualized_image_numpy_array, prediction_result_dataframe)
     """
     model.config["score_thresh"] = score_thresh
     image_np = None
-
+    image_width = 0
+    image_height = 0
+    
+    original_max_image_pixels = Image.MAX_IMAGE_PIXELS
     try:
+        # Temporarily increase Pillow's limit for its fallback path, 
+        # relying on internal max_pixels to do the actual scaling.
+        Image.MAX_IMAGE_PIXELS = 1000000000
+        
         try: # 1. Open with rasterio if possible
             with rasterio.open(image_path) as src:
-                image_np = src.read()
-                if image_np.ndim == 3 and image_np.shape[0] in (3, 4): # C, H, W -> H, W, C
-                    image_np = image_np.transpose(1, 2, 0)
+                image_data = src.read() 
+                if image_data.ndim == 3 and image_data.shape[0] in (3, 4): 
+                    image_np = image_data.transpose(1, 2, 0).copy() 
+                elif image_data.ndim == 2: 
+                    image_np = image_data.copy() 
+                else: 
+                    image_np = image_data.copy() 
                 image_width, image_height = src.width, src.height
         except rasterio.errors.RasterioIOError: # 2. Fallback to pillow
             try:
                 with Image.open(image_path) as image:
-                    image_width, image_height = image.size
-                    if image_width * image_height > max_pixels: # Resize if too large
-                        resize_factor = (max_pixels / (image_width * image_height))**0.5
-                        new_width = int(image_width * resize_factor)
-                        new_height = int(image_height * resize_factor)
+                    image_width_pil, image_height_pil = image.size # Use different vars for clarity before resize
+                    if image_width_pil * image_height_pil > max_pixels: 
+                        resize_factor = (max_pixels / (image_width_pil * image_height_pil))**0.5
+                        new_width = int(image_width_pil * resize_factor)
+                        new_height = int(image_height_pil * resize_factor)
+                        st.info(f"Image too large, resizing to {new_width}x{new_height} pixels from {image_width_pil}x{image_height_pil}.")
                         image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                    image_np = np.array(image.convert("RGB")) 
-                    image_width, image_height = image.size 
+                    image_np = np.array(image.convert("RGB")).copy() 
+                    image_width, image_height = image.size # Final dimensions after potential resize
             except Exception as e:
                 st.error(f"Error loading image with PIL: {e}")
                 return None, pd.DataFrame() 
@@ -92,12 +105,24 @@ def prediction_on_image(model, image_path, score_thresh=0.5,
     except (UnidentifiedImageError, FileNotFoundError) as e:
         st.error(f"Error loading image: {e}")
         return None, pd.DataFrame()
+    finally:
+        Image.MAX_IMAGE_PIXELS = original_max_image_pixels # Reset to Pillow's default
 
-    # Ensure image_np is RGB (3 channels) for consistent processing
-    if image_np.shape[2] == 4: 
-        image_np = image_np[:, :, :3] 
-    elif image_np.ndim == 2: 
-        image_np = cv2.cvtColor(image_np, cv2.COLOR_GRAY2RGB)
+    try: # Ensure image_np is RGB (3 channels) for consistent processing
+        if image_np.ndim == 3 and image_np.shape[2] == 4: 
+            image_np = image_np[:, :, :3].copy()
+        elif image_np.ndim == 2: 
+            image_np = cv2.cvtColor(image_np, cv2.COLOR_GRAY2RGB).copy()
+        elif image_np.ndim == 3 and image_np.shape[2] == 3:
+            if not image_np.flags.owndata: 
+                 image_np = image_np.copy()
+        
+        if image_np.ndim != 3 or image_np.shape[2] != 3:
+             st.error(f"Image could not be converted to 3-channel RGB. Final shape: {image_np.shape}")
+             return image_np, pd.DataFrame() 
+    except Exception as e:
+        st.error(f"Error processing image channels: {e}")
+        return image_np, pd.DataFrame() # Return potentially original image_np for context if possible
 
     # Perform prediction
     if image_width > min_tile_size or image_height > min_tile_size:
@@ -112,10 +137,10 @@ def prediction_on_image(model, image_path, score_thresh=0.5,
         prediction_result = pd.DataFrame()
 
     # Visualization
-    output_image = image_np.copy()
+    output_image = image_np.copy() 
     if not prediction_result.empty and 'xmin' in prediction_result.columns:
-        color_map = {"tbm-1": (0, 255, 255), "tbm-2": (204, 255, 0)} # Cyan, Yellow-Green
-        default_color = (255, 0, 0) # Red
+        color_map = {"tbm-1": (0, 255, 255), "tbm-2": (204, 255, 0)} 
+        default_color = (255, 0, 0) 
 
         for index, row in prediction_result.iterrows():
             x1, y1, x2, y2 = int(row['xmin']), int(row['ymin']), int(row['xmax']), int(row['ymax'])
@@ -132,8 +157,7 @@ def prediction_on_image(model, image_path, score_thresh=0.5,
             cv2.putText(output_image, f"{label} {score:.2f}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, font_thickness)
     
-    # Optional server-side saving
-    if save_dir:
+    if save_dir: 
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         base_filename = os.path.basename(image_path)
@@ -141,9 +165,9 @@ def prediction_on_image(model, image_path, score_thresh=0.5,
         filename_to_save = custom_filename if custom_filename else f"{name_part}_detected{ext_part}"
         save_path = os.path.join(save_dir, filename_to_save)
         try:
-            if output_image.ndim == 3 and output_image.shape[2] == 3: # Color image
-                 cv2.imwrite(save_path, cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR)) # Convert RGB to BGR for cv2
-            else: # Grayscale
+            if output_image.ndim == 3 and output_image.shape[2] == 3:
+                 cv2.imwrite(save_path, cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR))
+            else: 
                  cv2.imwrite(save_path, output_image)
             print(f"Saved visualized image to {save_path}") 
         except Exception as e:
@@ -152,8 +176,8 @@ def prediction_on_image(model, image_path, score_thresh=0.5,
     return output_image, prediction_result
 
 # --- Main Streamlit Application ---
-st.set_page_config(layout="wide") # Optional: Use full page width
-st.title('Immature Oil Palm Tree Detection')
+st.set_page_config(layout="wide") 
+st.title('Immature Oil Palm Detection')
 
 # --- Load Model ---
 model = load_deepforest_model(DEEPFOREST_MODEL_PATH)
@@ -165,9 +189,8 @@ img_file_buffer = st.sidebar.file_uploader(
     "Upload an Image", 
     type=["jpg", "jpeg", "png", "tif", "tiff"]
 )
-score_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.3, 0.01, key="score_slider")
-# Add other controls for prediction parameters here if desired, e.g.:
-# patch_size_control = st.sidebar.number_input("Patch Size (for Tiling)", value=512, step=64, key="patch_size_input")
+score_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.01, key="score_slider")
+patch_size_control = st.sidebar.number_input("Patch Size (for Tiling)", min_value=200, max_value=1000, value=800, step=100, key="patch_size_input")
 st.sidebar.markdown("---")
 
 # --- Main Panel ---
@@ -184,16 +207,21 @@ if model is not None:
         st.sidebar.markdown("**Original Uploaded Image**")
         try:
             original_image_pil = Image.open(image_path_for_prediction)
-            st.sidebar.image(original_image_pil, use_column_width=True)
+            st.sidebar.image(original_image_pil, use_container_width=True) 
         except Exception as e:
             st.sidebar.error(f"Could not display uploaded image preview: {e}")
             image_path_for_prediction = None 
     else: 
         image_path_for_prediction = DEMO_IMG_PATH
         st.sidebar.markdown("**Original Image (Demo)**")
+        original_pillow_max_pixels = Image.MAX_IMAGE_PIXELS 
         try:
+            # Temporarily increase for known large demo TIFF if needed by Pillow
+            # Ensure your DEMO_IMG_PATH is now a smaller image if possible
+            if DEMO_IMG_PATH.lower().endswith((".tif", ".tiff")): # Only for TIFF demo
+                 Image.MAX_IMAGE_PIXELS = 650000000 
             demo_image_pil = Image.open(DEMO_IMG_PATH)
-            st.sidebar.image(demo_image_pil, use_column_width=True)
+            st.sidebar.image(demo_image_pil, use_container_width=True) 
             if 'demo_info_shown' not in st.session_state: 
                  st.info("This is a demo image. Upload your own image using the sidebar control.")
                  st.session_state['demo_info_shown'] = True
@@ -203,6 +231,8 @@ if model is not None:
         except Exception as e:
             st.sidebar.error(f"Could not display demo image: {e}")
             image_path_for_prediction = None
+        finally:
+            Image.MAX_IMAGE_PIXELS = original_pillow_max_pixels # Reset to default
 
     if image_path_for_prediction: 
         st.header("Prediction Output")
@@ -211,8 +241,8 @@ if model is not None:
             output_image_np, detections_df = prediction_on_image(
                 model=model,
                 image_path=image_path_for_prediction,
-                score_thresh=score_threshold
-                # patch_size=patch_size_control, # Example if you add more controls
+                score_thresh=score_threshold,
+                patch_size=patch_size_control # Pass the value from the sidebar
             )
 
         if output_image_np is not None:
@@ -233,14 +263,14 @@ if model is not None:
                 class_counts_df_for_csv = pd.DataFrame(columns=['Class Label', 'Count'])
             
             st.markdown("---")
-            st.image(output_image_np, use_column_width=True, caption="Image with Detections")
+            st.image(output_image_np, use_container_width=True, caption="Image with Detections") 
             st.markdown("---")
 
             st.subheader("Downloads")
             col1, col2 = st.columns(2)
             original_filename_base = os.path.splitext(os.path.basename(image_path_for_prediction))[0]
 
-            try: # Download Visualized Image
+            try: 
                 pil_img_to_download = Image.fromarray(output_image_np.astype(np.uint8))
                 buf = BytesIO()
                 pil_img_to_download.save(buf, format="PNG")
@@ -256,7 +286,7 @@ if model is not None:
                 with col1:
                     st.error(f"Error preparing image for download: {str(e)[:200]}")
 
-            try: # Download Detection Counts CSV
+            try: 
                 csv_data = class_counts_df_for_csv.to_csv(index=False).encode('utf-8')
                 with col2:
                     st.download_button(
@@ -274,17 +304,17 @@ if model is not None:
         if img_file_buffer is None and (not DEMO_IMG_PATH or not os.path.exists(DEMO_IMG_PATH)):
             st.warning("Please upload an image, or ensure the demo image path is correctly configured.")
 
-    if uploaded_image_path_for_cleanup and os.path.exists(uploaded_image_path_for_cleanup): # Clean up temporary file
+    if uploaded_image_path_for_cleanup and os.path.exists(uploaded_image_path_for_cleanup):
         try:
             os.remove(uploaded_image_path_for_cleanup)
-        except Exception:
+        except Exception: 
             pass 
 else: 
     st.header("DeepForest Model could not be loaded.")
     st.markdown(f"""
     Please ensure:
     1. Your model file is correctly specified at `{DEEPFOREST_MODEL_PATH}`.
-    2. DeepForest and all dependencies are installed.
+    2. DeepForest and all dependencies are installed (check `requirements.txt`).
     3. The `load_deepforest_model` function correctly initializes `deepforest_main.deepforest()` 
        with `num_classes` and `label_dict` matching your trained model.
     """)
