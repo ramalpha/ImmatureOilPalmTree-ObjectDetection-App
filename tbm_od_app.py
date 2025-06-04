@@ -12,7 +12,7 @@ from io import BytesIO
 
 # --- Configuration ---
 DEEPFOREST_MODEL_PATH = "models/tbmdetection-v2-20250507.pth"
-DEMO_IMG_PATH = "demo/demo_image.tif"
+DEMO_IMG_PATH = "demo/demo_image.PNG"
 
 # --- Model Loading ---
 @st.cache_resource
