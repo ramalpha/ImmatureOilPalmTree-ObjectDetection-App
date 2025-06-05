@@ -8,6 +8,8 @@ The model is trained to identify the following classes:
 - tbm-1 (0-12 months)
 - tbm-2 (13-24 months)
 
+## Run Demo
+
 [![Launch Demo App](https://img.shields.io/badge/Demo_App-Open-brightgreen?style=for-the-badge&logo=streamlit&logoColor=white)](https://ramalpha-tbmdetection.streamlit.app/)
 
 ## Features
