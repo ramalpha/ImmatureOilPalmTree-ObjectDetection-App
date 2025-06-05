@@ -1,13 +1,14 @@
 # DeepForest Object Detection Model for Immature Oil Palm Tree
 
-[![Launch Demo App](https://img.shields.io/badge/Demo_App-Open-brightgreen?style=for-the-badge&logo=streamlit&logoColor=white)](https://ramalpha-tbmdetection.streamlit.app/)
-
 ## About
 
-This application allows for the multi-class detection of immature oil palm trees in images using a custom-trained DeepForest model. It provides a user-friendly interface to upload images and visualize the detection results.
+This application allows for the multi-class detection of immature oil palm trees in images using a custom-trained model built with the [DeepForest](https://github.com/weecology/DeepForest) library. It provides a user-friendly interface to upload images and visualize the detection results.
 
-tbm-1 (0-12 months)
-tbm-2 (13-24 months)
+The model is trained to identify the following classes:
+- tbm-1 (0-12 months)
+- tbm-2 (13-24 months)
+
+[![Launch Demo App](https://img.shields.io/badge/Demo_App-Open-brightgreen?style=for-the-badge&logo=streamlit&logoColor=white)](https://ramalpha-tbmdetection.streamlit.app/)
 
 ## Features
 
@@ -16,8 +17,6 @@ tbm-2 (13-24 months)
 - Displays detection bounding boxes, class labels, and confidence scores.
 - Allows download of the visualized image and a CSV summary of detections.
 - Uses a demo image if no image is uploaded.
-
-*(Please adjust this Features list if your app has more capabilities, like video or live detection, or other specific functionalities we haven't focused on recently).*
 
 ## Tech Stack
 
