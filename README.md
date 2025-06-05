@@ -1,5 +1,4 @@
 # DeepForest Object Detection Model for Immature Oil Palm Tree
-App by Ramadya Alif Satya
 
 [![Launch Demo App](https://img.shields.io/badge/Demo_App-Open-brightgreen?style=for-the-badge&logo=streamlit&logoColor=white)](https://ramalpha-tbmdetection.streamlit.app/)
 
