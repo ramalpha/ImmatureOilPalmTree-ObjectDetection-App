@@ -127,11 +127,11 @@ def prediction_on_image(model, image_path, score_thresh=0.5,
     # Perform prediction
     if image_width > min_tile_size or image_height > min_tile_size:
         prediction_result = model.predict_tile(
-            image=image_np, return_plot=False,
+            image=image_np,
             patch_size=patch_size, patch_overlap=patch_overlap
         )
     else:
-        prediction_result = model.predict_image(image_np, return_plot=False)
+        prediction_result = model.predict_image(image_np)
 
     if prediction_result is None: 
         prediction_result = pd.DataFrame()
