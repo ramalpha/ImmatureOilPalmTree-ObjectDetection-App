@@ -11,7 +11,7 @@ from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 
 # --- Configuration ---
-DEEPFOREST_MODEL_PATH = "models/tbmdetection-v9.pth"
+DEEPFOREST_MODEL_PATH = "models/tbmdetection.pth"
 DEMO_IMG_PATH = "demo/demo_image.PNG"
 
 # --- Model Loading ---
@@ -204,38 +204,14 @@ if model is not None:
             image_path_for_prediction = tmp_file.name
             uploaded_image_path_for_cleanup = image_path_for_prediction
         
-        st.sidebar.markdown("**Original Uploaded Image**")
-        try:
-            original_image_pil = Image.open(image_path_for_prediction)
-            st.sidebar.image(original_image_pil, use_container_width=True) 
-        except Exception as e:
-            st.sidebar.error(f"Could not display uploaded image preview: {e}")
-            image_path_for_prediction = None 
     else: 
         image_path_for_prediction = DEMO_IMG_PATH
-        st.sidebar.markdown("**Original Image (Demo)**")
-        original_pillow_max_pixels = Image.MAX_IMAGE_PIXELS 
-        try:
-            # Temporarily increase for known large demo TIFF if needed by Pillow
-            # Ensure your DEMO_IMG_PATH is now a smaller image if possible
-            if DEMO_IMG_PATH.lower().endswith((".tif", ".tiff")): # Only for TIFF demo
-                 Image.MAX_IMAGE_PIXELS = 650000000 
-            demo_image_pil = Image.open(DEMO_IMG_PATH)
-            st.sidebar.image(demo_image_pil, use_container_width=True) 
-            if 'demo_info_shown' not in st.session_state: 
-                 st.info("This is a demo image. Upload your own image using the sidebar control.")
-                 st.session_state['demo_info_shown'] = True
-        except FileNotFoundError:
-            st.sidebar.error(f"Demo image '{DEMO_IMG_PATH}' not found.")
-            image_path_for_prediction = None
-        except Exception as e:
-            st.sidebar.error(f"Could not display demo image: {e}")
-            image_path_for_prediction = None
-        finally:
-            Image.MAX_IMAGE_PIXELS = original_pillow_max_pixels # Reset to default
+        if 'demo_info_shown' not in st.session_state: 
+            st.info("This is a demo image. Upload your own image using the sidebar control.")
+            st.session_state['demo_info_shown'] = True
 
     if image_path_for_prediction: 
-        st.header("Prediction Output")
+        st.header("Prediction Result")
         
         with st.spinner("Analyzing image... This might take a moment."):
             output_image_np, detections_df = prediction_on_image(
@@ -246,7 +222,6 @@ if model is not None:
             )
 
         if output_image_np is not None:
-            st.subheader("Detection Summary")
             if detections_df is not None and not detections_df.empty:
                 num_total_detections = len(detections_df)
                 st.markdown(f"#### Total Detections Found: {num_total_detections}")
