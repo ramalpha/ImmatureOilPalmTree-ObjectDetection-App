@@ -136,6 +136,9 @@ def prediction_on_image(model, image_path, score_thresh=0.5,
     if prediction_result is None: 
         prediction_result = pd.DataFrame()
 
+    if not prediction_result.empty:
+        prediction_result = prediction_result[prediction_result.score >= score_thresh]
+
     # Visualization
     output_image = image_np.copy() 
     if not prediction_result.empty and 'xmin' in prediction_result.columns:
